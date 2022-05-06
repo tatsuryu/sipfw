@@ -4,7 +4,7 @@ _dothis_completions(){
     WORDS="add_management rm_management "
     WORDS+="add_pvt rm_pvt "
     WORDS+="add_sip rm_sip "
-    WORDS+="show"
+    WORDS+="apply show"
 
     if [ "${#COMP_WORDS[@]}" != "2" ]; then
         return 0

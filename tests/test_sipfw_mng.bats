@@ -168,3 +168,13 @@ teardown(){
     assert_failure
     assert_output --partial "endereco 198.18.0.0/15 nao encontrado"
 }
+
+@test "apply_action_should_call_svc_restart" {
+    CONFIGURATION_FILE=${CF}
+    SIPFW_SVC="echo called"
+
+    run main apply
+
+    assert_success
+    assert_output "called restart"
+}

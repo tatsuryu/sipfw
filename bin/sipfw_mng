@@ -26,6 +26,7 @@
 
 CONFIGURATION_FILE=/etc/sipfw/sipfw.conf
 LIB_PATH=/usr/local/lib/sipfw
+SIPFW_SVC=/etc/init.d/sipfw
 
 ip_already_exists(){
 ################################################################################
@@ -321,6 +322,9 @@ uso: $(basename ${0}) (add_sip|add_management|add_mng_port|add_pvt)
 
     show
         Lista as configurações atuais
+      
+    apply
+        Aplica as configurações atuais
 
 EOH
 }
@@ -349,6 +353,10 @@ main(){
     ;;
     show)
       show_conf
+      exit 0
+    ;;
+    apply)
+      ${SIPFW_SVC} restart
       exit 0
     ;;
     help)
