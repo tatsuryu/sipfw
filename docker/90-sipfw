@@ -1,0 +1,3 @@
+Cmnd_Alias SIPFW=/usr/local/sbin/sipfw_mng,/etc/init.d/sipfw
+
+sipfw ALL=(ALL) NOPASSWD:SIPFW

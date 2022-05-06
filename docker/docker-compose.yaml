@@ -1,0 +1,16 @@
+---
+version: "3.8"
+
+services:
+  sipfw:
+    build:
+      context: ../
+      dockerfile: docker/Dockerfile
+      args:
+        UID: "${DOCKER_ID}"
+        GID: "${DOCKER_GID}"
+    image: tatsuryu/sipfw:latest
+    volumes:
+      - ../:/app/sipfw
+    cap_add:
+      - NET_ADMIN

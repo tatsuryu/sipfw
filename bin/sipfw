@@ -1,0 +1,172 @@
+#!/usr/bin/env bash
+#
+# Start, stop or restart iptables rules base on sipfw configuration.
+#
+# The MIT License (MIT)
+#
+# Copyright (c) 2022 DevOps-Sama
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+# THE SOFTWARE.
+
+IPTABLES=/usr/sbin/iptables
+CONFIGURATION_FILE=/etc/sipfw/sipfw.conf
+LIB_PATH=/usr/local/lib/sipfw
+
+statefull_rules(){
+################################################################################
+# Statefull firewall rules
+# 
+# Globals:
+#  IPTABLES
+# Arguments:
+#  None
+################################################################################
+  ${IPTABLES} -A INPUT -m state --state RELATED,ESTABLISHED -j ACCEPT
+  ${IPTABLES} -A OUTPUT -m state --state RELATED,ESTABLISHED -j ACCEPT
+  ${IPTABLES} -A FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT
+}
+
+private_network_rules(){
+################################################################################
+# Creates rules to accept all incoming traffic from PRIVATE_NETWORKS
+# 
+# Globals:
+#  IPTABLES
+#  PRIVATE_NETWORKS
+# Arguments:
+#  None
+################################################################################
+  local pvt_net
+  for pvt_net in ${PRIVATE_NETWORKS[@]}; do
+      ${IPTABLES} -A INPUT -s ${pvt_net} -m comment \
+          --comment "Private Networks" -j ACCEPT
+  done
+}
+
+management_rules(){
+################################################################################
+# Creates rules to accept traffic on specific ports from MANAGEMENT ips, or
+# in case of MANAGEMENT_PORTS is empty, accept ALL traffic
+# 
+# Globals:
+#  IPTABLES
+#  MANAGEMENT
+#  MANAGEMENT_PORTS
+# Arguments:
+#  None
+################################################################################
+  local ip
+  local ports_cmd
+
+  if [ ${#MANAGEMENT_PORTS[@]} -gt 1 ]; then
+    ports_cmd="-m multiport --dports
+      $(echo ${MANAGEMENT_PORTS[@]} | sed 's/ /,/')"
+  elif [ ${#MANAGEMENT_PORTS[@]} -eq 1 ]; then
+      ports_cmd="--dport ${MANAGEMENT_PORTS[@]}"
+  fi
+
+  for ip in ${MANAGEMENT[@]}; do
+      ${IPTABLES} -A INPUT -s ${ip##*,} -p tcp \
+        ${ports_cmd} \
+        -m comment --comment "${ip%%,*}" -j ACCEPT
+  done
+}
+
+sip_rules(){
+################################################################################
+# Creates rules to accept incoming SIP traffic from CLIENTS
+# 
+# Globals:
+#  IPTABLES
+#  CLIENTS
+# Arguments:
+#  None
+################################################################################
+  local client
+  for client in ${CLIENTS[@]}; do
+    ${IPTABLES} -A INPUT -s ${client##*,} -p udp --dport 5060 \
+      -m comment --comment "${client%%,*}" -j ACCEPT
+  done
+}
+
+clean_rules(){
+################################################################################
+# Clean up rules and policies
+# 
+# Globals:
+#  IPTABLES
+# Arguments:
+#  None
+################################################################################
+  ${IPTABLES} -P INPUT ACCEPT
+  ${IPTABLES} -P FORWARD ACCEPT
+  ${IPTABLES} -F
+}
+
+set_policy() {
+  ${IPTABLES} -P INPUT DROP
+}
+
+start_fw(){
+  clean_rules
+  statefull_rules
+  private_network_rules
+  management_rules
+  sip_rules
+  set_policy
+}
+
+firewall(){
+  local action
+  action=${1}
+
+  case ${action} in
+    start|restart)
+      start_fw
+    ;;
+    stop)
+      clean_rules
+    ;;
+    *)
+      err "Opção Inválida"
+      help
+      exit 1
+    ;;
+  esac
+}
+
+help(){
+  cat <<EOH
+uso: /etc/init.d/$(basename ${0}) (start|stop|restart)
+EOH
+}
+
+main(){
+  local action
+  action=${1:-"start"}
+
+  read_conf
+
+  firewall ${action}
+}
+
+if [[ "$0" == "${BASH_SOURCE}" ]]; then
+  source ${LIB_PATH}/sipfw-common.sh
+  main $@;
+fi

@@ -1,0 +1,372 @@
+#!/usr/bin/env bash
+#
+# Manages sipfw configuration file.
+#
+# The MIT License (MIT)
+#
+# Copyright (c) 2022 DevOps-Sama
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+# THE SOFTWARE.
+
+CONFIGURATION_FILE=/etc/sipfw/sipfw.conf
+LIB_PATH=/usr/local/lib/sipfw
+
+ip_already_exists(){
+################################################################################
+# Checks if ip address exists on a comma separated string 
+# (client or description,ip address)
+# Globals:
+#  None
+# Arguments:
+#  ip
+################################################################################
+  local ip
+  local array
+  local item
+  ip=${1:?"Necessário informar o ip"}
+  shift
+  array=$@
+
+  for item in ${array[@]}; do
+    if [ "${ip}" == "${item##*,}" ]; then
+      err "IP já existe! (${item%%,*})"
+      return 1
+    fi
+  done
+}
+
+add_sip(){
+################################################################################
+# Adds a comma separated string on CLIENTS array (client name,ip address) 
+# with client name in uppercase a comma and a ip address, hostname or ip range.
+# Causes an error if the ip already exists
+# 
+# Globals:
+#  CLIENTS
+# Arguments:
+#  client
+#  address
+################################################################################
+  local client
+  local address
+
+  client=${1:?"Necessário informar o cliente"}
+  address=${2:?"Necessário informar o endereço"}
+
+
+  echo "Adicionando cliente: ${client^^} com endereço: ${address}" >&2
+
+  ip_already_exists ${address} "${CLIENTS[@]}" || {
+    return $?
+  }
+
+  CLIENTS+=("${client^^},${address}")
+  echo ${CLIENTS[@]}
+}
+
+rm_sip(){
+################################################################################
+# Removes all values that match the client name in CLIENTS array.
+# 
+# Globals:
+#  CLIENTS
+# Arguments:
+#  client
+################################################################################
+  local client
+  local cname
+  local item
+  local rmcount
+  
+  client=${1:?"Necessário informar o cliente"}
+  rmcount=0
+
+
+  echo "Removendo ${client^^}"
+  for item in ${!CLIENTS[@]}; do
+    cname=${CLIENTS[${item}]}
+    if [ "${client^^}" == "${cname%%,*}" ]; then
+      unset CLIENTS[$item]
+      ((rmcount++))
+    fi
+  done
+
+  [ $rmcount -gt 0 ] && return 0
+
+  err "${client} nao encontrado" >&2
+  return 1
+}
+
+add_management(){
+################################################################################
+# Add a comma separated string in MANAGEMENT array with a description in 
+# uppercase, a comma and the ip address, hostname or ip range.
+# 
+# Globals:
+#  MANAGEMENT
+# Arguments:
+#  client
+#  address
+################################################################################
+  local client
+  local address
+
+  client=${1:?"Necessário informar uma descricao"}
+  address=${2:?"Necessário informar o endereço"}
+
+  echo "Adicionando descricao: ${client^^} para o endereço: ${address}" >&2
+
+  ip_already_exists ${address} "${MANAGEMENT[@]}" || {
+    return $?
+  }
+
+  MANAGEMENT+=("${client^^},${address}")
+}
+
+rm_management(){
+################################################################################
+# Removes the matched ip address (or ip range, or hostname) in MANAGEMENT array.
+# 
+# Globals:
+#  MANAGEMENT
+# Arguments:
+#  ip
+################################################################################
+  local ip
+  local current_ip
+  local item
+  
+  ip=${1:?"Necessário informar o ip"}
+
+
+  echo "Removendo ${ip^^}"
+  for item in ${!MANAGEMENT[@]}; do
+    current_ip=${MANAGEMENT[${item}]}
+    if [ "${ip}" == "${current_ip##*,}" ]; then
+      unset MANAGEMENT[$item]
+      return 0
+    fi
+  done
+
+  err "${ip} nao encontrado" >&2
+  return 1
+}
+
+add_mng_port(){
+################################################################################
+# Add a port number on MANAGEMENT_PORTS array
+# 
+# Globals:
+#  MANAGEMENT_PORTS
+# Arguments:
+#  port
+################################################################################
+  local port
+
+  port=${1:?"Necessário informar o número da porta"}
+
+  echo "Adicionando porta: ${port}" >&2
+  MANAGEMENT_PORTS+=("${port}")
+}
+
+rm_mng_port(){
+################################################################################
+# Removes port from MANAGEMENT_PORTS array.
+# 
+# Globals:
+#  MANAGEMENT_PORTS
+# Arguments:
+#  port
+################################################################################
+  local port
+  local item
+
+  port=${1:?"Necessario informar a porta"}
+
+  echo "Removendo porta ${port}"
+  for item in ${!MANAGEMENT_PORTS[@]}; do
+    if [ "${port}" == "${MANAGEMENT_PORTS[${item}]}" ]; then
+      unset MANAGEMENT_PORTS[${item}]
+      return 0
+    fi
+  done
+
+  err "porta ${port} nao encontrada" >&2
+  return 1
+}
+
+add_pvt(){
+################################################################################
+# Add a ip or ip range on PRIVATE_NETWORKS array
+# 
+# Globals:
+#  PRIVATE_NETWORKS
+# Arguments:
+#  address
+################################################################################
+  local address
+  
+  address=${1:?"Necessário informar o endereço"}
+
+
+  echo "Adicionando rede privada: ${address}" >&2
+  PRIVATE_NETWORKS+=("${address}")
+}
+
+rm_pvt(){
+################################################################################
+# Removes from PRIVATE_NETWORKS array a matched address
+# 
+# Globals:
+#  PRIVATE_NETWORKS
+# Arguments:
+#  address
+################################################################################
+  local address
+
+  address=${1:?"Necessário informar o endereço"}
+
+  echo "Adicionando rede privada: ${address}" >&2
+  for item in ${!PRIVATE_NETWORKS[@]}; do
+    if [ "${address}" == "${PRIVATE_NETWORKS[${item}]}" ]; then
+      unset PRIVATE_NETWORKS[${item}]
+      return 0
+    fi
+  done
+
+  err "endereco ${address} nao encontrado" >&2
+  return 1
+}
+
+show_conf(){
+################################################################################
+# Show contents from CONFIGURATION_FILE
+# 
+# Globals:
+#  CONFIGURATION_FILE
+# Arguments:
+#  None
+################################################################################
+  cat ${CONFIGURATION_FILE}
+}
+
+sipfw_help(){
+  cat <<EOH
+
+uso: $(basename ${0}) (add_sip|add_management|add_mng_port|add_pvt)
+
+    add_sip nomedocliente enderecoip/faixaip/hostname
+        Adiciona ip ao firewall liberando porta do protocolo SIP
+        ex.:
+            add_sip google 8.8.8.
+            add_sip google google.sip.com
+            add_sip google 8.8.8.0/24
+    
+    rm_sip  nomedocliente
+        Remove todas as entradas com aquele nome de cliente
+        ex.:
+            rm_sip clientex
+
+    add_management descricao enderecoip/faixaip/hostname
+        Adiciona ip ap firewall liberando acesso as portas de servico
+        (MANAGEMENT_PORTS).
+        ex.:
+            add_management clientex 8.8.8.0/24
+            add_management clientex clientex.sip.com.br
+            add_management clientex 1.1.1.1
+
+    rm_management ip/faixadeip/hostname
+        Remove a primeira entrada que houver com aquele ip/faixa/hostname
+        ex.:
+            rm_management 1.1.1.1
+            rm_management clientex.sip.com.br
+            rm_management 1.1.1.0/24
+
+    add_mng_port numerodaporta
+        Adiciona a porta as portas de servico para serem acessadas pelos ips
+        de gerencia(MANAGEMENT)
+        ex.:
+            add_mng_port 22
+    
+    rm_mng_port numerodaporta
+        Remove a porta informada
+        ex.:
+            rm_mng_port 22
+
+    add_pvt enderecoip/faixaip
+        Adiciona faixas de ip privados para acesso ao SIP
+        ex.:
+            add_pvt 10.0.0.0/8
+    
+    rm_pvt enderecoip/faixaip
+        Remove o endereco ip ou faixa de ips informada
+        ex.:
+            rm_pvt 10.0.0.0/8
+
+    show
+        Lista as configurações atuais
+
+EOH
+}
+
+main(){
+################################################################################
+# Reads from configuration file and execute calls the selected action.
+# 
+# Globals:
+#  None
+# Arguments:
+#  action
+################################################################################
+  local action
+  action=${1:?"Necessário informar uma acao$(sipfw_help)"}
+  shift
+
+  read_conf || return $?
+
+  case $action in
+    add_management|add_mng_port|add_pvt|add_sip)
+      $action $@ || return $?
+    ;;
+    rm_management|rm_mng_port|rm_pvt|rm_sip)
+      $action $@ || return $?
+    ;;
+    show)
+      show_conf
+      exit 0
+    ;;
+    help)
+      sipfw_help
+      exit 0
+    ;;
+    *)
+      echo $action >&2
+      echo "Opção inválida" >&2
+      sipfw_help
+      exit 1
+    ;;
+  esac
+
+  write_conf
+}
+
+if [[ "$0" == "${BASH_SOURCE}" ]]; then
+  source ${LIB_PATH}/sipfw-common.sh
+  main $@
+fi
