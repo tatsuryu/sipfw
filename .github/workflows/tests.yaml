@@ -5,7 +5,7 @@ on:
   push:
     branches:
       - master
-      -dev
+      - dev
     paths-ignore:
       - '**.md'
 
@@ -17,8 +17,7 @@ jobs:
       fail-fast: true
     
     steps:
-      - name: Install dependencies
-        run: |
-          sudo apt update && apt install -y git make
+      - name: checkout repo
+        uses: actions/checkout@v2
       - name: Run tests
         run: make tests
